@@ -1,0 +1,6 @@
+# Exclude these from GitHub's download archives
+docs/ export-ignore
+examples/ export-ignore
+tests/ export-ignore
+Makefile export-ignore
+*.md export-ignore

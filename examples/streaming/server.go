@@ -8,25 +8,21 @@ import (
 	"time"
 )
 
+type User struct {
+	ID       int    `json:"id"`
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Location string `json:"location"`
+}
+
 func startStreamingServer(ready chan struct{}) {
 	mux := http.NewServeMux()
 
-	// Basic raw data streaming endpoint
 	mux.HandleFunc("/stream", handleRawStream)
-
-	// Line-by-line streaming endpoint
 	mux.HandleFunc("/streamlines", handleLineStream)
-
-	// JSON objects streaming endpoint
 	mux.HandleFunc("/streamjson", handleJSONStream)
-
-	// Typed objects streaming endpoint
 	mux.HandleFunc("/streamusers", handleUsersStream)
-
-	// Server-Sent Events endpoint
 	mux.HandleFunc("/sse", handleSSE)
-
-	// Slow endless stream for cancellation demo
 	mux.HandleFunc("/slowendless", handleSlowEndlessStream)
 
 	server := &http.Server{

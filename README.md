@@ -1,31 +1,26 @@
-# goclient
+# httpio - HTTP Client Library for Go
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/anggasct/goclient)](https://goreportcard.com/report/github.com/anggasct/goclient)
-[![GoDoc](https://godoc.org/github.com/anggasct/goclient?status.svg)](https://godoc.org/github.com/anggasct/goclient)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![CI](https://github.com/anggasct/goclient/workflows/CI/badge.svg)](https://github.com/anggasct/goclient/actions)
+`httpio` is a flexible HTTP client library for Go that provides enhanced functionality through middleware support, streaming capabilities, and a fluent API. It's designed to simplify making HTTP requests in Go while providing robust features for advanced use cases.
 
-A minimal and elegant HTTP client wrapper for Go, built on top of the standard `net/http` library.
+![Go Version](https://img.shields.io/badge/go-1.24+-blue.svg)
 
-## ✨ Features
+## 📚 Features
 
-- ✅ **Simple API** for GET, POST, PUT, DELETE, etc.
-- 🧱 **Clean abstraction** over net/http (not a replacement)
-- 📦 **JSON encoding/decoding** helpers
-- 🧾 **Easy header, query params, and body handling**
-- 🔄 **Built-in retry support** with configurable policies
-- ⚡ **Circuit breaker pattern** for resilience and fault tolerance
-- ⏱ **Context-aware** requests and interceptors
-- 🔌 **Extensible** with request and response interceptors
-- 📥 **Streaming support** for responses and SSE (Server-Sent Events)
-- 🎯 **Type-safe** streaming with automatic JSON unmarshaling
-- 📊 **Built-in metrics** and monitoring capabilities
-- 🚀 **Production-ready** with comprehensive testing
+- ✅ **Fluent, chainable API** for clean and readable HTTP requests
+- ✅ **Middleware architecture** for customizing request/response handling
+- ✅ **Streaming support** for processing large responses efficiently
+- ✅ **Server-Sent Events (SSE)** support
+- ✅ **Built-in middleware**:
+  - Circuit breaker for resilience
+  - Logging with configurable levels
+  - OAuth authentication
+  - Automatic retry with backoff
+- ✅ **Timeouts** and cancellation support via `context.Context`
 
 ## 📦 Installation
 
 ```bash
-go get github.com/anggasct/goclient
+go get -u github.com/anggasct/httpio
 ```
 
 ## 🚀 Quick Start
@@ -36,249 +31,168 @@ package main
 import (
     "context"
     "fmt"
-    "log"
     "time"
-
-    "github.com/anggasct/goclient/pkg/goclient"
+    
+    "github.com/anggasct/httpio"
 )
 
 func main() {
-    client := goclient.New().
-        WithBaseURL("https://api.github.com").
-        WithHeader("User-Agent", "my-app/1.0").
-        WithTimeout(10 * time.Second)
-
+    // Create a new client
+    client := httpio.NewClient().
+        WithBaseURL("https://api.example.com").
+        WithTimeout(10 * time.Second).
+        WithHeader("Content-Type", "application/json")
+    
     ctx := context.Background()
-    resp, err := client.GET(ctx, "/users/octocat")
+    
+    // Simple GET request
+    resp, err := client.GET(ctx, "/users/123")
     if err != nil {
-        log.Fatal(err)
+        panic(err)
     }
     defer resp.Close()
-
+    
+    // Check if the request was successful
+    if !resp.IsSuccess() {
+        fmt.Printf("Request failed: %s\n", resp.Status)
+        return
+    }
+    
+    // Parse the response body as JSON
     var user struct {
-        Login string `json:"login"`
-        Name  string `json:"name"`
+        ID   int    `json:"id"`
+        Name string `json:"name"`
     }
+    
     if err := resp.JSON(&user); err != nil {
-        log.Fatal(err)
+        fmt.Printf("Failed to parse JSON: %v\n", err)
+        return
     }
-
-    fmt.Printf("User: %s (%s)\n", user.Name, user.Login)
+    
+    fmt.Printf("User: %s (ID: %d)\n", user.Name, user.ID)
 }
 ```
 
-## 📖 Documentation
+## 🔍 Key Concepts
 
-- **[Getting Started](docs/getting-started.md)** - Quick start guide and basic usage
-- **[Advanced Usage](docs/advanced-usage.md)** - Interceptors, retry, connection pooling, and more
-- **[Circuit Breaker](docs/circuit-breaker.md)** - Resilience patterns and fault tolerance
-- **[Streaming](docs/streaming.md)** - Handling streaming responses and Server-Sent Events
-- **[Examples](examples/)** - Working code examples for all features
+### Making HTTP Requests
 
-## 🏗 Core Concepts
-
-### Building Requests
+The library supports all standard HTTP methods with both simple and advanced usage patterns:
 
 ```go
-// Simple GET with query parameters
-resp, err := client.NewRequest("GET", "/search").
-    WithQuery("q", "golang").
-    WithQuery("sort", "stars").
-    Do(ctx, client)
+// Simple GET
+resp, err := client.GET(ctx, "/api/resource")
 
-// POST with JSON body
-data := map[string]interface{}{
-    "name":  "John",
-    "email": "john@example.com",
-}
-resp, err := client.POST(ctx, "/users", data)
+// Simple POST with JSON body
+resp, err := client.POST(ctx, "/api/resource", map[string]interface{}{
+    "name": "New Resource",
+    "active": true,
+})
+
+// Advanced request with chaining
+resp, err := client.NewRequest("GET", "/api/resources").
+    WithQuery("limit", "10").
+    WithQuery("sort", "name").
+    WithHeader("X-Custom-Header", "value").
+    Do(ctx)
 ```
 
-### Handling Responses
+### Using Middleware
+
+Middleware can be added to clients to customize request processing:
 
 ```go
-// Get response as string
-str, err := resp.String()
-
-// Get response as bytes
-bytes, err := resp.Bytes()
-
-// Parse JSON into struct
-var result MyStruct
-err := resp.JSON(&result)
-
-// Check status
-if resp.IsSuccess() {
-    // Handle success
+// Add logger middleware
+loggerConfig := &httpio.LoggerConfig{
+    Level: logger.LevelDebug,
 }
+client := httpio.NewClient().
+    WithMiddleware(httpio.NewLoggerMiddleware(loggerConfig))
+
+// Add retry middleware
+retryConfig := &httpio.RetryConfig{
+    MaxRetries: 3,
+    RetryDelay: 100 * time.Millisecond,
+}
+client = client.WithMiddleware(httpio.NewRetryMiddleware(retryConfig))
+
+// Circuit breaker middleware
+cbConfig := &httpio.CircuitBreakerConfig{
+    Threshold:   5,
+    FailureRate: 0.5,
+    ResetTime:   10 * time.Second,
+}
+client = client.WithMiddleware(httpio.NewCircuitBreakerMiddleware(cbConfig))
 ```
 
-### Streaming Responses
+### Handling Streaming Responses
+
+The library provides several methods for processing streaming data:
 
 ```go
-// Stream raw chunks
-err := resp.Stream(func(chunk []byte) error {
-    fmt.Printf("Received %d bytes\n", len(chunk))
+// Basic byte stream processing
+err := httpio.GetStream(client, ctx, "/api/stream", func(chunk []byte) error {
+    fmt.Printf("Received chunk of size %d bytes\n", len(chunk))
     return nil
 })
 
-// Stream lines
-err := resp.StreamLines(func(line []byte) error {
-    fmt.Println(string(line))
+// Process stream line by line
+err := httpio.GetStreamLines(client, ctx, "/api/lines", func(line []byte) error {
+    fmt.Printf("Line: %s\n", string(line))
     return nil
 })
 
-// Stream JSON objects
-err := resp.StreamJSON(func(raw json.RawMessage) error {
-    var data MyStruct
-    json.Unmarshal(raw, &data)
+// Process stream as JSON objects
+err := httpio.GetStreamJSON(client, ctx, "/api/json-stream", func(jsonMsg json.RawMessage) error {
+    fmt.Printf("JSON object: %s\n", string(jsonMsg))
     return nil
 })
 
-// Type-safe streaming
-type User struct {
-    ID   int    `json:"id"`
-    Name string `json:"name"`
+// Process typed objects
+type Event struct {
+    ID    string `json:"id"`
+    Type  string `json:"type"`
+    Data  string `json:"data"`
 }
 
-err := resp.StreamInto(func(user User) error {
-    fmt.Printf("User: %s\n", user.Name)
+err := httpio.GetStreamInto(client, ctx, "/api/events", func(event Event) error {
+    fmt.Printf("Event ID: %s, Type: %s\n", event.ID, event.Type)
     return nil
 })
 ```
 
-## ⚡ Advanced Features
+### Server-Sent Events Support
 
-### Circuit Breaker
+The library has built-in support for Server-Sent Events (SSE):
 
 ```go
-// Enable circuit breaker
-client := goclient.New().
-    WithCircuitBreaker(3, 2*time.Second, 2) // 3 failures, 2s timeout, 2 half-open calls
-
-// Monitor state changes
-client.OnCircuitBreakerStateChange(func(from, to goclient.CircuitBreakerState) {
-    fmt.Printf("Circuit breaker: %s -> %s\n", from, to)
+err := httpio.GetSSE(client, ctx, "/api/events", func(event httpio.SSEEvent) {
+    fmt.Printf("Event: %s, Data: %s\n", event.Event, event.Data)
 })
 ```
 
-### Retry Logic
+## 📋 Examples
 
-```go
-// Basic retry
-client.WithRetry(3, 500*time.Millisecond, nil)
+See the [examples directory](https://github.com/anggasct/httpio/tree/main/examples) for complete examples including:
 
-// Custom retry policy
-customPolicy := func(resp *http.Response, err error) bool {
-    return err != nil || (resp != nil && resp.StatusCode == 429)
-}
-client.WithRetry(5, 1*time.Second, customPolicy)
-```
+- Basic HTTP requests
+- Middleware usage (logging, retries, circuit breaking)
+- Streaming responses
+- Server-Sent Events processing
+- OAuth authentication
 
-### Request Interceptors
+## 📝 Documentation
 
-```go
-// Add authentication
-authInterceptor := goclient.InterceptorFunc(func(ctx context.Context, req *http.Request) (*http.Request, error) {
-    if token := getTokenFromContext(ctx); token != "" {
-        req.Header.Set("Authorization", "Bearer "+token)
-    }
-    return req, nil
-})
-
-client.WithInterceptor(authInterceptor)
-```
-
-### Response Interceptors
-
-```go
-// Log responses
-logger := goclient.ResponseInterceptorFunc(func(ctx context.Context, req *http.Request, resp *http.Response, err error) (*http.Response, error) {
-    if err != nil {
-        log.Printf("Request failed: %v", err)
-    } else {
-        log.Printf("Response: %s", resp.Status)
-    }
-    return resp, err
-})
-
-client.WithResponseInterceptor(logger)
-```
-
-## 🎯 Examples
-
-The [examples/](examples/) directory contains working examples for all features:
-
-- **[Basic Usage](examples/basic/)** - Simple HTTP requests and responses
-- **[Circuit Breaker](examples/circuit-breaker/)** - Resilience patterns in action
-- **[Streaming](examples/streaming/)** - Real-time data processing
-- **[Advanced](examples/advanced/)** - Interceptors and complex scenarios
-
-## 🧪 Testing
+For full API documentation, see [docs](https://github.com/anggasct/httpio/tree/main/docs) or use Go's built-in documentation:
 
 ```bash
-# Run all tests
-make test
-
-# Run integration tests
-make test-integration
-
-# Run benchmarks
-make test-bench
-
-# Run with coverage
-go test -cover ./pkg/...
+go doc github.com/anggasct/httpio
 ```
 
-## 🤝 Contributing
+## 🛠️ Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-### Development Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/anggasct/goclient.git
-cd goclient
-
-# Install development tools
-make install-tools
-
-# Run tests
-make test
-
-# Run linting
-make lint
-
-# Format code
-make fmt
-```
-
-## 📊 Benchmarks
-
-```
-BenchmarkClient_GET-8              5000    250000 ns/op    1024 B/op     5 allocs/op
-BenchmarkClient_POST-8             3000    350000 ns/op    1536 B/op     8 allocs/op
-BenchmarkStreaming_JSON-8         10000    100000 ns/op     512 B/op     3 allocs/op
-BenchmarkCircuitBreaker-8        100000     12000 ns/op      64 B/op     1 allocs/op
-```
-
-## 🔗 Related Projects
-
-- [net/http](https://golang.org/pkg/net/http/) - Go's standard HTTP library
-- [fasthttp](https://github.com/valyala/fasthttp) - Fast HTTP package for Go
-- [resty](https://github.com/go-resty/resty) - Simple HTTP and REST client library
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- The Go team for the excellent standard library
-- The open-source community for inspiration and feedback
-- All contributors who help make this project better
-
----
-
-Made with ❤️ by [anggasct](https://github.com/anggasct)
+This project is licensed under the [MIT License](LICENSE).

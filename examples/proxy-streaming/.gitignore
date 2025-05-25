@@ -1,0 +1,10 @@
+# Built binaries
+proxy_streaming
+mock_server
+
+# Log files
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
