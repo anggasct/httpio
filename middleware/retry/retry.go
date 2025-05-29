@@ -114,20 +114,7 @@ func (m *Middleware) Handle(next middleware.Handler) middleware.Handler {
 				return lastResp, lastErr
 			}
 
-			timeout := 30 * time.Second
-			if deadline, ok := ctx.Deadline(); ok {
-				timeout = time.Until(deadline)
-				if timeout <= 0 {
-					return lastResp, ctx.Err()
-				}
-			}
-
-			client := &http.Client{
-				Timeout:   timeout,
-				Transport: http.DefaultTransport,
-			}
-
-			retryResp, retryErr := client.Do(retryReq)
+			retryResp, retryErr := next(ctx, retryReq)
 			lastResp = retryResp
 			lastErr = retryErr
 

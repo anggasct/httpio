@@ -8,18 +8,21 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/anggasct/httpio/middleware"
 )
 
-// Request is a prepared HTTP request
+// Request represents a prepared HTTP request with middleware support
 type Request struct {
-	Method  string
-	URL     string
-	Headers http.Header
-	Query   url.Values
-	Body    interface{}
-	Client  HTTPClient
+	Method      string
+	URL         string
+	Headers     http.Header
+	Query       url.Values
+	Body        interface{}
+	Client      HTTPClient
+	middlewares []middleware.Middleware
+	timeout     *time.Duration
 }
 
 // HTTPClient defines the interface for the HTTP client
@@ -62,8 +65,38 @@ func (r *Request) WithBody(body interface{}) *Request {
 	return r
 }
 
+// WithMiddleware adds middleware specific to this request
+func (r *Request) WithMiddleware(m middleware.Middleware) *Request {
+	if r.middlewares == nil {
+		r.middlewares = make([]middleware.Middleware, 0)
+	}
+	r.middlewares = append(r.middlewares, m)
+	return r
+}
+
+// WithMiddlewares adds multiple middlewares specific to this request
+func (r *Request) WithMiddlewares(middlewares ...middleware.Middleware) *Request {
+	if r.middlewares == nil {
+		r.middlewares = make([]middleware.Middleware, 0, len(middlewares))
+	}
+	r.middlewares = append(r.middlewares, middlewares...)
+	return r
+}
+
+// WithTimeout sets a timeout specific to this request
+func (r *Request) WithTimeout(timeout time.Duration) *Request {
+	r.timeout = &timeout
+	return r
+}
+
 // Do executes the request and returns the response
 func (r *Request) Do(ctx context.Context) (*Response, error) {
+	if r.timeout != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, *r.timeout)
+		defer cancel()
+	}
+
 	client := r.Client
 	parsedURL, err := url.Parse(r.URL)
 	if err != nil {
@@ -115,8 +148,9 @@ func (r *Request) Do(ctx context.Context) (*Response, error) {
 
 	handler := baseHandler
 
-	if len(client.GetMiddlewares()) > 0 {
-		handler = middleware.Chain(baseHandler, client.GetMiddlewares()...)
+	allMiddlewares := r.buildMiddlewareChain()
+	if len(allMiddlewares) > 0 {
+		handler = middleware.Chain(baseHandler, allMiddlewares...)
 	}
 
 	resp, err := handler(ctx, req)
@@ -134,22 +168,38 @@ func (r *Request) Do(ctx context.Context) (*Response, error) {
 	return response, nil
 }
 
+// buildMiddlewareChain combines client middlewares with request-specific middlewares
+func (r *Request) buildMiddlewareChain() []middleware.Middleware {
+	clientMiddlewares := r.Client.GetMiddlewares()
+	if len(clientMiddlewares) == 0 && len(r.middlewares) == 0 {
+		return nil
+	}
+
+	totalLen := len(clientMiddlewares) + len(r.middlewares)
+	allMiddlewares := make([]middleware.Middleware, 0, totalLen)
+
+	allMiddlewares = append(allMiddlewares, clientMiddlewares...)
+	allMiddlewares = append(allMiddlewares, r.middlewares...)
+
+	return allMiddlewares
+}
+
 // Stream executes the request and streams the response as raw bytes
-func (r *Request) Stream(ctx context.Context, handler func([]byte) error) error {
+func (r *Request) Stream(ctx context.Context, handler func([]byte) error, opts ...StreamOption) error {
 	resp, err := r.Do(ctx)
 	if err != nil {
 		return err
 	}
-	return resp.Stream(handler)
+	return resp.Stream(handler, opts...)
 }
 
 // StreamLines executes the request and streams the response line by line
-func (r *Request) StreamLines(ctx context.Context, handler func([]byte) error) error {
+func (r *Request) StreamLines(ctx context.Context, handler func([]byte) error, opts ...StreamOption) error {
 	resp, err := r.Do(ctx)
 	if err != nil {
 		return err
 	}
-	return resp.StreamLines(handler)
+	return resp.StreamLines(handler, opts...)
 }
 
 // StreamJSON executes the request and streams the response as JSON objects

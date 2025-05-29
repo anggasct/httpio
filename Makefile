@@ -8,15 +8,7 @@ help: ## Show this help
 test: ## Run unit tests
 	go test -v ./...
 
-
-test-all: test test-integration 
-
 # Development
 clean: ## Clean build artifacts
 	go clean ./...
 	rm -f coverage.out
-
-examples: ## Run examples
-	cd examples/basic && go run .
-	cd examples/circuit-breaker && go run .
-	cd examples/streaming && go run .
