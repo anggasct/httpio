@@ -9,10 +9,6 @@ import (
 
 	"github.com/anggasct/httpio/internal/client"
 	"github.com/anggasct/httpio/middleware"
-	"github.com/anggasct/httpio/middleware/circuitbreaker"
-	"github.com/anggasct/httpio/middleware/logger"
-	"github.com/anggasct/httpio/middleware/oauth"
-	"github.com/anggasct/httpio/middleware/retry"
 )
 
 // Request is a prepared HTTP request
@@ -204,47 +200,3 @@ type Middleware = middleware.Middleware
 
 // MiddlewareFunc is a function type for middleware that wraps an HTTP handler
 type MiddlewareFunc = middleware.MiddlewareFunc
-
-// CircuitBreakerConfig represents configuration for circuit breaker middleware.
-type CircuitBreakerConfig = circuitbreaker.Config
-
-// LoggerConfig represents configuration for logging middleware.
-type LoggerConfig = logger.Config
-
-// OAuthConfig represents configuration for OAuth middleware.
-type OAuthConfig = oauth.Config
-
-// RetryConfig represents configuration for retry middleware.
-type RetryConfig = retry.Config
-
-// NewCircuitBreakerMiddleware creates a new circuit breaker middleware.
-func NewCircuitBreakerMiddleware(config *CircuitBreakerConfig) middleware.Middleware {
-	return circuitbreaker.New(config)
-}
-
-// NewLoggerMiddleware creates a new logger middleware.
-func NewLoggerMiddleware(config *LoggerConfig) middleware.Middleware {
-	return logger.New(config)
-}
-
-// NewOAuthMiddleware creates a new OAuth middleware.
-func NewOAuthMiddleware(config *OAuthConfig) middleware.Middleware {
-	return oauth.New(config)
-}
-
-// NewRetryMiddleware creates a new retry middleware.
-func NewRetryMiddleware(config *RetryConfig) middleware.Middleware {
-	return retry.New(config)
-}
-
-// LogLevel defines logging verbosity.
-type LogLevel = logger.LogLevel
-
-// Log levels
-const (
-	LevelNone  = logger.LevelNone
-	LevelError = logger.LevelError
-	LevelInfo  = logger.LevelInfo
-	LevelDebug = logger.LevelDebug
-	LevelTrace = logger.LevelTrace
-)

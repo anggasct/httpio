@@ -38,7 +38,6 @@ func (m *functionMiddleware) Handle(next Handler) Handler {
 }
 
 // Middleware defines a function that wraps an HTTP handler and returns a new handler
-// This is kept for backward compatibility
 type MiddlewareFunc func(next Handler) Handler
 
 // WrapMiddleware converts a function-based middleware to a struct-based one

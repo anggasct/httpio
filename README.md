@@ -105,34 +105,38 @@ resp, err := client.NewRequest("GET", "/api/resources").
 Middleware can be added to clients to customize request processing:
 
 ```go
+import (
+    "github.com/anggasct/httpio"
+    "github.com/anggasct/httpio/middleware/logger"
+    "github.com/anggasct/httpio/middleware/retry"
+    "github.com/anggasct/httpio/middleware/circuitbreaker"
+    "github.com/anggasct/httpio/middleware/oauth"
+)
+
 // Add logger middleware
-loggerConfig := &httpio.LoggerConfig{
-    Level: httpio.LevelDebug,
-}
 client := httpio.New().
-    WithMiddleware(httpio.NewLoggerMiddleware(loggerConfig))
+    WithMiddleware(logger.New(&logger.Config{
+        Level: logger.LevelDebug,
+    }))
 
 // Add retry middleware
-retryConfig := &httpio.RetryConfig{
+client = client.WithMiddleware(retry.New(&retry.Config{
     MaxRetries: 3,
-    RetryDelay: 100 * time.Millisecond,
-}
-client = client.WithMiddleware(httpio.NewRetryMiddleware(retryConfig))
+    BaseDelay:  100 * time.Millisecond,
+}))
 
 // Circuit breaker middleware
-cbConfig := &httpio.CircuitBreakerConfig{
-    Threshold:   5,
-    ResetTime:   10 * time.Second,
-}
-client = client.WithMiddleware(httpio.NewCircuitBreakerMiddleware(cbConfig))
+client = client.WithMiddleware(circuitbreaker.New(&circuitbreaker.Config{
+    Threshold: 5,
+    ResetTime: 10 * time.Second,
+}))
 
 // OAuth middleware
-oauthConfig := &httpio.OAuthConfig{
+client = client.WithMiddleware(oauth.New(&oauth.Config{
     ClientID:     "your-client-id",
     ClientSecret: "your-client-secret",
     TokenURL:     "https://oauth.example.com/token",
-}
-client = client.WithMiddleware(httpio.NewOAuthMiddleware(oauthConfig))
+}))
 ```
 
 ### Connection Pooling
@@ -307,58 +311,117 @@ resp.Consume() // Read and discard body
 ### Middleware Configuration
 
 ```go
-// Logger levels: LevelNone, LevelError, LevelInfo, LevelDebug, LevelTrace
-logger := httpio.NewLoggerMiddleware(&httpio.LoggerConfig{
-    Level: httpio.LevelDebug,
+import (
+    "github.com/anggasct/httpio"
+    "github.com/anggasct/httpio/middleware/logger"
+    "github.com/anggasct/httpio/middleware/retry"
+    "github.com/anggasct/httpio/middleware/circuitbreaker"
+    "github.com/anggasct/httpio/middleware/oauth"
+)
+
+// Logger middleware with different levels: LevelNone, LevelError, LevelInfo, LevelDebug, LevelTrace
+loggerMiddleware := logger.New(&logger.Config{
+    Level: logger.LevelDebug,
 })
 
-// Retry with exponential backoff
-retry := httpio.NewRetryMiddleware(&httpio.RetryConfig{
+// Retry middleware with exponential backoff
+retryMiddleware := retry.New(&retry.Config{
     MaxRetries: 3,
-    RetryDelay: 100 * time.Millisecond,
+    BaseDelay:  100 * time.Millisecond,
 })
 
-// Circuit breaker
-cb := httpio.NewCircuitBreakerMiddleware(&httpio.CircuitBreakerConfig{
+// Circuit breaker middleware
+cbMiddleware := circuitbreaker.New(&circuitbreaker.Config{
     Threshold: 5,
     ResetTime: 10 * time.Second,
 })
 
-// OAuth 2.0
-oauth := httpio.NewOAuthMiddleware(&httpio.OAuthConfig{
+// OAuth 2.0 middleware
+oauthMiddleware := oauth.New(&oauth.Config{
     ClientID:     "client-id",
     ClientSecret: "client-secret",
     TokenURL:     "https://oauth.example.com/token",
 })
 
-client.WithMiddleware(logger).
-    WithMiddleware(retry).
-    WithMiddleware(cb).
-    WithMiddleware(oauth)
+client.WithMiddleware(loggerMiddleware).
+    WithMiddleware(retryMiddleware).
+    WithMiddleware(cbMiddleware).
+    WithMiddleware(oauthMiddleware)
 ```
 
 ## 🚀 Advanced Usage
 
 ### Custom Middleware
 
+You can create custom middleware using either struct-based or function-based approaches:
+
+#### Struct-based Middleware
+
 ```go
-func customMiddleware(next httpio.MiddlewareFunc) httpio.MiddlewareFunc {
+// RequestTimer is a struct-based middleware that measures request duration
+type RequestTimer struct {
+    name string
+}
+
+// NewRequestTimer creates a new RequestTimer middleware
+func NewRequestTimer(name string) *RequestTimer {
+    return &RequestTimer{name: name}
+}
+
+// Handle implements the middleware.Middleware interface
+func (rt *RequestTimer) Handle(next middleware.Handler) middleware.Handler {
     return func(ctx context.Context, req *http.Request) (*http.Response, error) {
-        // Pre-request logic
         start := time.Now()
         
         // Call next middleware/handler
         resp, err := next(ctx, req)
         
-        // Post-request logic
+        // Log timing information
         duration := time.Since(start)
-        fmt.Printf("Request took %v\n", duration)
+        fmt.Printf("[%s] %s %s took %v\n", 
+            rt.name, req.Method, req.URL.Path, duration)
         
         return resp, err
     }
 }
 
-client := httpio.New().WithMiddleware(customMiddleware)
+// Usage
+timer := NewRequestTimer("APITimer")
+client := httpio.New().WithMiddleware(timer)
+```
+
+#### Function-based Middleware
+
+```go
+// Simple function middleware
+func loggerMiddleware(next middleware.Handler) middleware.Handler {
+    return func(ctx context.Context, req *http.Request) (*http.Response, error) {
+        fmt.Printf("Making request: %s %s\n", req.Method, req.URL.String())
+        
+        resp, err := next(ctx, req)
+        
+        if resp != nil {
+            fmt.Printf("Response: %s\n", resp.Status)
+        }
+        
+        return resp, err
+    }
+}
+
+// Parameterized function middleware
+func authMiddleware(token string) middleware.MiddlewareFunc {
+    return func(next middleware.Handler) middleware.Handler {
+        return func(ctx context.Context, req *http.Request) (*http.Response, error) {
+            req.Header.Set("Authorization", "Bearer "+token)
+            return next(ctx, req)
+        }
+    }
+}
+
+// Usage
+client := httpio.New().
+    WithMiddleware(middleware.WrapMiddleware(loggerMiddleware)).
+    WithMiddleware(middleware.WrapMiddleware(authMiddleware("my-token")))
 ```
 
 ### Error Handling
@@ -387,7 +450,6 @@ if err := resp.JSON(&result); err != nil {
 ## 🛠️ Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
-
 
 ### Reporting Issues
 

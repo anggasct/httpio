@@ -109,7 +109,6 @@ func (r *Request) Do(ctx context.Context) (*Response, error) {
 
 	req.Header = r.Headers
 
-	// Create a base handler that uses the client's HTTP client
 	baseHandler := func(ctx context.Context, req *http.Request) (*http.Response, error) {
 		return client.Do(req)
 	}
